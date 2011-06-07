@@ -8,6 +8,9 @@ from paste.httpheaders import ETAG
 
 version_re = re.compile("/\d+.\d+.\d+/", re.U)
 
+# ensure .webapp files are served with the correct content-type.
+import mimetypes
+mimetypes.add_type("application/x-web-app-manifest+json", ".webapp")
 
 class StaticURLParser(object):
     """
