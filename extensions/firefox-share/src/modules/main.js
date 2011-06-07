@@ -303,13 +303,13 @@ FFShare.prototype = {
 
         // dev and staging settings are based on the system pref
         if (this.prefs.system === 'dev') {
-          this.prefs.share_url = 'http://linkdrop.caraveo.com:5000/share/panel/';
+          this.prefs.share_url = 'http://linkdrop.caraveo.com:5000/1/share/panel/';
         } else if (this.prefs.system === 'staging') {
           this.prefs.share_url = 'https://f1-staging.mozillamessaging.com/share/panel/';
         }
 
         if (this.prefs.system === 'dev') {
-          this.prefs.frontpage_url = 'http://linkdrop.caraveo.com:5000/';
+          this.prefs.frontpage_url = 'http://linkdrop.caraveo.com:5000/1';
         } else if (this.prefs.system === 'staging') {
           this.prefs.frontpage_url = 'http://f1-staging.mozillamessaging.com/';
         }
