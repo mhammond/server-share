@@ -42,6 +42,10 @@ Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/PlacesUtils.jsm");
 Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 
+// the open web apps service helpers.
+// XXX - we probably want to bundle these OWA helpers in the short term...
+Cu.import("resource://openwebapps/modules/services.js");
+
 const FFSHARE_EXT_ID = "ffshare@mozilla.org";
 const SHARE_STATUS = ["", "start", "", "finished"];
 const SHARE_DONE = 0;
@@ -84,6 +88,7 @@ function sharePanel(window, ffshare) {
   this.button = this.document.getElementById('share-button');
   this.browser = this.document.getElementById('share-browser');
   this.panel = this.document.getElementById('share-popup');
+  this.services = new serviceInvocationHandler(this.window);
 
   this.defaultWidth = 400;
   this.lastWidth = 400;
@@ -737,5 +742,20 @@ sharePanel.prototype = {
     // fx 4
     let position = (this.window.getComputedStyle(this.window.gNavToolbox, "").direction === "rtl") ? 'bottomcenter topright' : 'bottomcenter topleft';
     this.panel.openPopup(anchor, position, 0, 0, false, false);
+  },
+
+  panelReady: function() {
+    // ask for creation of service iframes now that we know the panel
+    // has its listener in place for the messages this generates...
+    let thePanelRecord = {
+      methodName: 'link.send',
+      args: {},
+      contentWindow: this.window, // correct?
+      panel: this.panel,
+      iframe: this.browser,
+      successCB: function() {dump("panel iframes created OK\n");},
+      errorCB: function(err) {dump("Error creating iframes " + err + "\n");}
+    };
+    this.services._updateContent(thePanelRecord);
   }
 };

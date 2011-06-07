@@ -119,6 +119,26 @@ function startup(data, reason) AddonManager.getAddonByID(data.id, function(addon
     // load startAddon.  This is where the addon logic should actually start.
     Cu.import("resource://"+id+"/modules/main.js");
 
+    // Install our "apps" - but note XXX:
+    // * we need to query the F1 server for what it knows about until we
+    //   can rely on OWA for this discovery - but for now the list is
+    //   hardcoded below.
+    // * this is almost certainly the wrong place to do this!
+    Cu.import("resource://openwebapps/modules/api.js");
+    if (FFRepoImplService) {
+      // need a window to register the app...
+      var browser = Services.wm.getMostRecentWindow("navigator:browser");
+      var names = ["facebook"];
+      var i=0;
+      for (i=0;i<names.length;i++) {
+        // Use the OWA origin to avoid confirmation prompts (which means we must
+        // use a FQ url in the args)
+        FFRepoImplService.install('resource://openwebapps',
+                                  {url: 'http://localhost:5000/1/apps/' + names[i] + '.webapp'},
+                                  browser);
+      }
+    }
+
     /* Setup l10n, getString is loaded from addonutils */
     getString.init(addon);
 
