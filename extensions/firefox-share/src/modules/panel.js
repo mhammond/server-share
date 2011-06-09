@@ -573,6 +573,12 @@ sharePanel.prototype = {
     if (!wrapper) {
       return;
     }
+    // XXX - the sizeToContent logic doesn't work correctly when error divs etc
+    // are shown - as they aren't in 'wrapper' their size isn't taken into
+    // account.
+    // But doing it this way means the panel is slightly larger than it should
+    // be when only the wrapper is actually showing :(
+    let wrapper = this.browser.contentWindow;
     // XXX argh, we really should look at the panel and see what margins/padding
     // sizes are and calculate that way, however this is pretty complex due
     // to how the background image of the panel is used,
