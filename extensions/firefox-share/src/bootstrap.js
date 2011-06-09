@@ -128,15 +128,15 @@ function startup(data, reason) AddonManager.getAddonByID(data.id, function(addon
     if (FFRepoImplService) {
       // need a window to register the app...
       var browser = Services.wm.getMostRecentWindow("navigator:browser");
-      var names = ["facebook"];
-      var i=0;
-      for (i=0;i<names.length;i++) {
+      var apps = ["http://linkdrop.caraveo.com:5000/1/apps/facebook.webapp",
+                  "http://localhost:5000/1/apps/twitter.webapp"];
+      apps.forEach(function(app) {
         // Use the OWA origin to avoid confirmation prompts (which means we must
         // use a FQ url in the args)
         FFRepoImplService.install('resource://openwebapps',
-                                  {url: 'http://localhost:5000/1/apps/' + names[i] + '.webapp'},
+                                  {url: app},
                                   browser);
-      }
+      });
     }
 
     /* Setup l10n, getString is loaded from addonutils */
