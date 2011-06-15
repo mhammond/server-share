@@ -109,10 +109,16 @@ sharePanel.prototype = {
       }
     }, false);
     this.loadListener = function (evt) {
-      self.attachMessageListener();
-      self.window.setTimeout(function () {
-        self.sizeToContent();
-      }, 0);
+      // we will get load events for every origin in our page - which includes
+      // the origin of each of the web-apps.  But we only want to act on
+      // events from our share page (else we wind up attaching multiple
+      // "message" handlers etc.)
+      if (evt.originalTarget.location.href.indexOf(self.ffshare.prefs.share_url) === 0) {
+        self.attachMessageListener();
+        self.window.setTimeout(function () {
+          self.sizeToContent();
+        }, 0);
+      }
     };
     this.browser.addEventListener("load", this.loadListener, true);
 
@@ -120,6 +126,11 @@ sharePanel.prototype = {
     this.stateProgressListener = new StateProgressListener(this);
     webProgress.addProgressListener(this.stateProgressListener, Ci.nsIWebProgress.NOTIFY_STATE_WINDOW);
 
+    // observer for when apps are installed.
+    let observerService = Cc["@mozilla.org/observer-service;1"]
+                            .getService(Ci.nsIObserverService);
+    observerService.addObserver(this, "openwebapp-installed", false);
+    observerService.addObserver(this, "openwebapp-uninstalled", false);
     // Extend Services object
     XPCOMUtils.defineLazyServiceGetter(
       Services, "bookmarks",
@@ -132,6 +143,16 @@ sharePanel.prototype = {
     let webProgress = this.browser.webProgress;
     webProgress.removeProgressListener(this.stateProgressListener);
     this.stateProgressListener = null;
+  },
+
+  observe: function(subject, topic, data) {
+    if (topic === 'openwebapp-installed' || topic === 'openwebapp-uninstalled') {
+      let win = this.browser.contentWindow.wrappedJSObject;
+      win.postMessage(JSON.stringify({
+        topic: topic,
+        data: JSON.parse(data)
+      }), win.location.protocol + "//" + win.location.host);
+    }
   },
 
   attachMessageListener: function () {
@@ -763,5 +784,32 @@ sharePanel.prototype = {
       errorCB: function(err) {dump("Error creating iframes " + err + "\n");}
     };
     this.services._updateContent(thePanelRecord);
+  },
+
+  installApp: function(manifestUrl) {
+    let self = this;
+    Cu.import("resource://openwebapps/modules/api.js");
+    if (FFRepoImplService) {
+      var args = {
+        url: manifestUrl,
+        hidePostInstallPrompt: true, // don't want the app panel to appear.
+        onerror: function(errob) {
+          // TODO: should probably consider notifying the content of the error
+          // so it can do something useful.
+          dump("Failed to install " + manifestUrl + ": " + errob.code + ": " + errob.message + "\n");
+        },
+        onsuccess: function() {
+          // Note the app being installed will have triggered the
+          // 'openwebapp-installed' observer, which will in-turn have posted
+          // a message to the content.
+        }
+      };
+      // Hrmph - need to use an installOrigin of the hard-coded OWA app store
+      FFRepoImplService.install('http://localhost:8420',
+                                args,
+                                this.browser);
+    } else {
+      dump("Can't install app - failed to get FFRepoImplService\n");
+    }
   }
 };
