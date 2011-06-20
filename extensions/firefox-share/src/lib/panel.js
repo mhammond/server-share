@@ -36,15 +36,18 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-const {classes: Cc, interfaces: Ci, utils: Cu} = Components;
-Cu.import("resource://ffshare/modules/progress.js");
-Cu.import("resource://gre/modules/Services.jsm");
-Cu.import("resource://gre/modules/PlacesUtils.jsm");
-Cu.import("resource://gre/modules/XPCOMUtils.jsm");
+const {Cc, Ci, Cm, Cu, components} = require("chrome");
+
+let tmp = {};
+Cu.import("resource://gre/modules/Services.jsm", tmp);
+Cu.import("resource://gre/modules/PlacesUtils.jsm", tmp);
+Cu.import("resource://gre/modules/XPCOMUtils.jsm", tmp);
+let {Services, PlacesUtils, XPCOMUtils} = tmp;
+
+let {StateProgressListener} = require("progress");
 
 // the open web apps service helpers.
-// XXX - we probably want to bundle these OWA helpers in the short term...
-Cu.import("resource://openwebapps/modules/services.js");
+let {serviceInvocationHandler} = require("services");
 
 const FFSHARE_EXT_ID = "ffshare@mozilla.org";
 const SHARE_STATUS = ["", "start", "", "finished"];
@@ -54,8 +57,6 @@ const SHARE_ERROR = 2;
 const SHARE_FINISHED = 3;
 
 const NS_XUL = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
-
-const EXPORTED_SYMBOLS = ["sharePanel"];
 
 function mixin(target, source, override) {
   //TODO: consider ES5 getters and setters in here.
@@ -180,7 +181,11 @@ sharePanel.prototype = {
           topic = message.topic;
           data = message.data;
           if (topic && self[topic]) {
-            self[topic](data);
+            try {
+              self[topic](data);
+            } catch (ex) {
+              console.error("Handler of topic", topic, "failed:", ex);
+            }
           }
         }
       }
@@ -788,28 +793,26 @@ sharePanel.prototype = {
 
   installApp: function(manifestUrl) {
     let self = this;
-    Cu.import("resource://openwebapps/modules/api.js");
-    if (FFRepoImplService) {
-      var args = {
-        url: manifestUrl,
-        hidePostInstallPrompt: true, // don't want the app panel to appear.
-        onerror: function(errob) {
-          // TODO: should probably consider notifying the content of the error
-          // so it can do something useful.
-          dump("Failed to install " + manifestUrl + ": " + errob.code + ": " + errob.message + "\n");
-        },
-        onsuccess: function() {
-          // Note the app being installed will have triggered the
-          // 'openwebapp-installed' observer, which will in-turn have posted
-          // a message to the content.
-        }
-      };
-      // Hrmph - need to use an installOrigin of the hard-coded OWA app store
-      FFRepoImplService.install('http://localhost:8420',
-                                args,
-                                this.browser);
-    } else {
-      dump("Can't install app - failed to get FFRepoImplService\n");
-    }
+    let {FFRepoImplService} = require("api");
+    var args = {
+      url: manifestUrl,
+      hidePostInstallPrompt: true, // don't want the app panel to appear.
+      onerror: function(errob) {
+        // TODO: should probably consider notifying the content of the error
+        // so it can do something useful.
+        dump("Failed to install " + manifestUrl + ": " + errob.code + ": " + errob.message + "\n");
+      },
+      onsuccess: function() {
+        // Note the app being installed will have triggered the
+        // 'openwebapp-installed' observer, which will in-turn have posted
+        // a message to the content.
+      }
+    };
+    // Hrmph - need to use an installOrigin of the hard-coded OWA app store
+    FFRepoImplService.install('http://localhost:8420',
+                              args,
+                              this.browser);
   }
 };
+
+exports.sharePanel = sharePanel;

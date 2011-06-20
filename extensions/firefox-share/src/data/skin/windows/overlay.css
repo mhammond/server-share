@@ -20,26 +20,29 @@
  *
  * Contributor(s):
  * */
-@namespace xul url(http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul);
 
 #share-button {
-  list-style-image: url("resource://ffshare/chrome/skin/toolbar-button.png");
+  list-style-image: url("resource://ffshare-at-mozilla-dot-org-ffshare-data/skin/windows/toolbar-button.png");
   width: auto;
   height: auto;
 }
 
 #share-button[checked] {
-  list-style-image: url("resource://ffshare/chrome/skin/toolbar-button-active.png");
+  list-style-image: url("resource://ffshare-at-mozilla-dot-org-ffshare-data/skin/windows/toolbar-button-active.png");
 }
 
 #share-button[firstRun] {
-  list-style-image: url("resource://ffshare/chrome/skin/toolbar-button-glow.png");
+  list-style-image: url("resource://ffshare-at-mozilla-dot-org-ffshare-data/skin/windows/toolbar-button-glow.png");
 }
 
 #share-button[status="start"] {
-  list-style-image: url("resource://ffshare/chrome/skin/status-sharing.png");
+  list-style-image: url("resource://ffshare-at-mozilla-dot-org-ffshare-data/skin/windows/status-sharing.png");
 }
 
 #share-button[status="finished"] {
-  list-style-image: url("resource://ffshare/chrome/skin/status-shared.png");
+  list-style-image: url("resource://ffshare-at-mozilla-dot-org-ffshare-data/skin/windows/status-shared.png");
+}
+
+.ffshare-panel .panel-inner-arrowcontent {
+    padding: 0;
 }

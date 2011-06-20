@@ -36,12 +36,12 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-const {classes: Cc, interfaces: Ci, utils: Cu} = Components;
+const {Cc, Ci, Cm, Cu, components} = require("chrome");
 const errorPage = "resource://ffshare/chrome/content/down.html";
-Cu.import("resource://gre/modules/XPCOMUtils.jsm");
 
-const EXPORTED_SYMBOLS = ["StateProgressListener",
-                          "LocationChangeProgressListener"];
+var tmp = {};
+Cu.import("resource://gre/modules/XPCOMUtils.jsm", tmp);
+var {XPCOMUtils} = tmp;
 
 /**
  * This progress listener looks for HTTP codes that are errors/not
@@ -61,7 +61,7 @@ StateProgressListener.prototype = {
             aIID.equals(Ci.nsISupports)) {
             return this;
         }
-        throw Components.results.NS_NOINTERFACE;
+        throw components.results.NS_NOINTERFACE;
     },
 
     onStateChange: function (aWebProgress, aRequest, aStateFlags, aStatus) {
@@ -125,3 +125,6 @@ LocationChangeProgressListener.prototype = {
   onSecurityChange: function (aWebProgress, aRequest, aState) {},
   onStatusChange: function (aWebProgress, aRequest, aStatus, aMessage) {}
 };
+
+exports.StateProgressListener = StateProgressListener;
+exports.LocationChangeProgressListener = LocationChangeProgressListener;

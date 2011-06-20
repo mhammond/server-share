@@ -36,17 +36,15 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-const FFSHARE_EXT_ID = "ffshare@mozilla.org";
-const {classes: Cc, interfaces: Ci, utils: Cu} = Components;
+const {Cc, Ci, Cm, Cu} = require("chrome");
 
 Cu.import("resource://gre/modules/Services.jsm");
 Cu.import("resource://gre/modules/AddonManager.jsm");
-Cu.import("resource://ffshare/modules/addonutils.js");
+
+let {loadStylesheet, getString} = require("addonutils");
 
 const NS_XUL = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 const SHARE_BUTTON_ID = 'share-button';
-
-const EXPORTED_SYMBOLS = ["installOverlay"];
 
 function installOverlay(win) {
   let unloaders = [];
@@ -58,12 +56,12 @@ function installOverlay(win) {
   let document = win.document;
 
   // Load our stylesheet and register an unloader that removes it again.
-  dump("running on "+xulRuntime.OS+"\n");
+  console.log("running on "+xulRuntime.OS+"\n");
   let pi;
   if (xulRuntime.OS === "WINNT") {
-    pi = loadStylesheet(win, "resource://ffshare/chrome/skin/windows/overlay.css");
+    pi = loadStylesheet(win, "skin/windows/overlay.css");
   } else {
-    pi = loadStylesheet(win, "resource://ffshare/chrome/skin/overlay.css");
+    pi = loadStylesheet(win, "skin/overlay.css");
   }
   unloaders.push(function () {
     win.document.removeChild(pi);
@@ -207,3 +205,5 @@ function installOverlay(win) {
 
   return unloaders;
 }
+
+exports.installOverlay = installOverlay;

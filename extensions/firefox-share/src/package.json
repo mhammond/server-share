@@ -1,0 +1,7 @@
+{
+    "name": "ffshare",
+    "id": "ffshare@mozilla.org",
+    "description": "Share things",
+    "author": "Mozilla",
+    "dependencies": ["openwebapps"]
+}

@@ -36,12 +36,21 @@
  *
  * ***** END LICENSE BLOCK ***** */
 
-const FFSHARE_EXT_ID = "ffshare@mozilla.org";
-const {classes: Cc, interfaces: Ci, utils: Cu} = Components;
+const self = require("self");
+// const unload = require("unload");
 
-Cu.import("resource://gre/modules/Services.jsm");
-Cu.import("resource://gre/modules/AddonManager.jsm");
-Cu.import("resource://ffshare/modules/progress.js");
+const {Cc, Ci, Cm, Cu, components} = require("chrome");
+
+const FFSHARE_EXT_ID = "ffshare@mozilla.org";
+
+let tmp = {};
+Cu.import("resource://gre/modules/Services.jsm", tmp);
+let {Services} = tmp;
+
+let {LocationChangeProgressListener} = require("progress");
+
+let {installOverlay} = require("overlay");
+let {getString} = require("addonutils");
 
 const NS_XUL = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 const SHARE_BUTTON_ID = "share-button";
@@ -63,11 +72,13 @@ function installFFShareIntoWindow(win) {
 }
 
 function log(msg) {
+    console.log(msg);
     dump(msg+"\n");
     Cu.reportError('.' + msg); // avoid clearing on empty log
 }
 
 function error(msg) {
+    console.error(msg);
     dump(msg+"\n");
     Cu.reportError('.' + msg); // avoid clearing on empty log
 }
@@ -259,10 +270,8 @@ FFShare.prototype = {
     },
 
     init: function() {
-        let tmp = {};
-
-        Cu.import("resource://ffshare/modules/panel.js", tmp);
-        this.sharePanel = new tmp.sharePanel(this.window, this);
+        let {sharePanel} = require("panel");
+        this.sharePanel = new sharePanel(this.window, this);
 
         // Load FUEL to access Application and setup preferences
         let Application = Cc["@mozilla.org/fuel/application;1"].getService(Ci.fuelIApplication);
@@ -315,10 +324,11 @@ FFShare.prototype = {
         }
 
         let self = this;
+/***        
         AddonManager.getAddonByID(FFSHARE_EXT_ID, function (addon) {
             self.onInstallUpgrade(addon.version);
         });
-
+***/
         try {
             this.canShareProgressListener = new LocationChangeProgressListener(this);
             this.window.gBrowser.addProgressListener(this.canShareProgressListener);
@@ -503,3 +513,92 @@ FFShare.prototype = {
     }
 
 };
+
+let unloaders = [];
+
+function loadIntoWindow(win) {
+  // overlay.js must export installOverlay.  installOverlay returns a
+  // array of functions that are called during unload.
+
+  try {
+    log("install addon\n");
+    unloaders = installOverlay(win);
+    unloaders.push.apply(unloaders, installFFShareIntoWindow(win));
+  } catch(e) {
+    log("load error "+e+"\n");
+  }
+}
+
+function eachWindow(callback) {
+  let enumerator = Services.wm.getEnumerator("navigator:browser");
+  while (enumerator.hasMoreElements()) {
+    let win = enumerator.getNext();
+    if (win.document.readyState === "complete") {
+      callback(win);
+    } else {
+      runOnLoad(win, callback);
+    }
+  }
+}
+
+function runOnLoad(window, callback) {
+  window.addEventListener("load", function onLoad() {
+    window.removeEventListener("load", onLoad, false);
+    callback(window);
+  }, false);
+}
+
+function windowWatcher(subject, topic) {
+  if (topic !== "domwindowopened") {
+    return;
+  }
+  let win = subject.QueryInterface(Ci.nsIDOMWindow);
+  // We don't know the type of the window at this point yet, only when
+  // the load event has been fired.
+  runOnLoad(win, function (win) {
+    let doc = win.document.documentElement;
+    if (doc.getAttribute("windowtype") == "navigator:browser") {
+      loadIntoWindow(win);
+    }
+  });
+}
+
+function registerResource(installPath, name) {
+    let resource = Services.io.getProtocolHandler("resource")
+                   .QueryInterface(Ci.nsIResProtocolHandler);
+    let alias = Services.io.newFileURI(installPath);
+    if (!installPath.isDirectory())
+        alias = Services.io.newURI("jar:" + alias.spec + "!/", null, null);
+    resource.setSubstitution(name, alias);
+}
+
+function getAddonShortName(name) {
+  return name.split('@')[0];
+}
+
+function startup() {
+    /* Setup l10n, getString is loaded from addonutils */
+    getString.init();
+
+    dump("init windows\n");
+    eachWindow(loadIntoWindow);
+
+    Services.ww.registerNotification(windowWatcher);
+    unloaders.push(function() Services.ww.unregisterNotification(windowWatcher));
+};
+
+function shutdown(reason) {
+    // variable why is one of 'uninstall', 'disable', 'shutdown', 'upgrade' or
+    // 'downgrade'. doesn't matter now, but might later
+    let id = getAddonShortName(data.id);
+    let resource = Services.io.getProtocolHandler("resource")
+                   .QueryInterface(Ci.nsIResProtocolHandler);
+    resource.setSubstitution(id, null);
+    unloaders.forEach(function(unload) unload && unload());
+}
+
+startup();
+
+// Hook up unloaders
+// XXX - why can't I require('unload') above?
+// unload.when(shutdown);
