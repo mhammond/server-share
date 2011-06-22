@@ -3,5 +3,5 @@
     "id": "ffshare@mozilla.org",
     "description": "Share things",
     "author": "Mozilla",
-    "dependencies": ["openwebapps"]
+    "dependencies": ["api-utils", "addon-kit", "openwebapps"]
 }
