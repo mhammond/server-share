@@ -37,7 +37,7 @@
  * ***** END LICENSE BLOCK ***** */
 
 const self = require("self");
-// const unload = require("unload");
+const unload = require("unload");
 
 const {Cc, Ci, Cm, Cu, components} = require("chrome");
 
@@ -64,10 +64,12 @@ const EXPORTED_SYMBOLS = ["installFFShareIntoWindow"];
 function installFFShareIntoWindow(win) {
     win.ffshare = new FFShare(win);
     let unloaders = [];
+    /* By the time the unloader is called, win.ffshare is already undefined
     unloaders.push(function () {
         win.ffshare.unload();
         win.ffshare = null;
     });
+    */
     return unloaders;
 }
 
@@ -192,6 +194,44 @@ FFShare.prototype = {
     keycode : "VK_F1",
     oldKeycodeId: "key_old_ffshare",
 
+    _invoke: function(options) {
+        // tell OWA that we want to handle the link.send service
+        // (this need be done only once, but multiple times doesn't hurt)
+        let {serviceInvocationHandler} = require("services");
+        let services = new serviceInvocationHandler(this.window);
+        services.registerMethodHandler("link.send", this.prefs.share_url);
+        // create our 'helper' object - we will pass it the iframe once we
+        // get the onshow callback.
+        let {sharePanelHelper} = require("panel");
+        let panelHelper = new sharePanelHelper(this.window, this);
+        // setup the mediator args and invoke the service.
+        let mediatorargs = {
+            anchor: this.window.document.getElementById('share-button'),
+            onshow: function(iframe) {
+                panelHelper.browser = iframe;
+            },
+            onhide: function(iframe) {console.log("got onhide callback");},
+            onresult: function(req) {
+                return panelHelper.onMediatorCallback(req);
+            }
+        };
+        services.invoke(this.window, "link.send", panelHelper.getOptions(options),
+                        function() {
+                            console.log("send was success");
+                        },
+                        function(err) {
+                            console.error("Failed to invoke share service", err);
+                        },
+                        mediatorargs);
+    },
+    invoke: function(options) {
+        try {
+            this._invoke(options);
+        } catch (ex) {
+            console.error("invoke callback failed", ex, ex.stack);
+        }
+    },
+
     togglePanel: function(options) {
         let popup = this.window.document.getElementById('share-popup');
         if (popup.state == 'open') {
@@ -270,8 +310,6 @@ FFShare.prototype = {
     },
 
     init: function() {
-        let {sharePanel} = require("panel");
-        this.sharePanel = new sharePanel(this.window, this);
 
         // Load FUEL to access Application and setup preferences
         let Application = Cc["@mozilla.org/fuel/application;1"].getService(Ci.fuelIApplication);
@@ -366,8 +404,6 @@ FFShare.prototype = {
         this.window.removeEventListener('tabviewhide', this.tabViewHideListener, false);
         this.tabViewShowListener = null;
         this.tabViewHideListener = null;
-
-        this.sharePanel.unload();
     },
 
     onInstallUpgrade: function (version) {
@@ -577,10 +613,12 @@ function getAddonShortName(name) {
 }
 
 function startup() {
+    // just the 'require' of this module boostraps the world.
+    let owa = require("openwebapps/main");
+
     /* Setup l10n, getString is loaded from addonutils */
     getString.init();
 
-    dump("init windows\n");
     eachWindow(loadIntoWindow);
 
     Services.ww.registerNotification(windowWatcher);
@@ -590,15 +628,10 @@ function startup() {
 function shutdown(reason) {
     // variable why is one of 'uninstall', 'disable', 'shutdown', 'upgrade' or
     // 'downgrade'. doesn't matter now, but might later
-    let id = getAddonShortName(data.id);
-    let resource = Services.io.getProtocolHandler("resource")
-                   .QueryInterface(Ci.nsIResProtocolHandler);
-    resource.setSubstitution(id, null);
     unloaders.forEach(function(unload) unload && unload());
 }
 
 startup();
 
 // Hook up unloaders
-// XXX - why can't I require('unload') above?
-// unload.when(shutdown);
+unload.when(shutdown);

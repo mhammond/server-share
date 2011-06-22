@@ -75,177 +75,12 @@ function unescapeXml(text) {
          .replace(/&quot;|&#34;/g, '"');
 }
 
-// singleton controller for the share panel
-// A state object is attached to each browser tab when the share panel
-// is opened for that tab.  The state object is removed from the current
-// tab when the panel is closed.
-function sharePanel(window, ffshare) {
-  this.window = window;
-
-  this.gBrowser = window.gBrowser;
-  this.document = window.document;
-  this.ffshare = ffshare;
-
-  this.button = this.document.getElementById('share-button');
-  this.browser = this.document.getElementById('share-browser');
-  this.panel = this.document.getElementById('share-popup');
-  this.services = new serviceInvocationHandler(this.window);
-
-  this.defaultWidth = 400;
-  this.lastWidth = 400;
-  this.defaultHeight = 180;
-  this.lastHeight = 180;
-  this.forceReload = true;
-
-  this.init();
+function pageOptionsBuilder(browser)
+{
+  this.gBrowser = browser;
 }
-sharePanel.prototype = {
-  init: function () {
-    // hookup esc to also close the panel
-    // XXX not working, maybe need to listen on window
-    let self = this;
-    this.panel.addEventListener('keypress', function (e) {
-      if (e.keyCode === 27 /*"VK_ESC"*/ ) {
-        self.close();
-      }
-    }, false);
-    this.loadListener = function (evt) {
-      // we will get load events for every origin in our page - which includes
-      // the origin of each of the web-apps.  But we only want to act on
-      // events from our share page (else we wind up attaching multiple
-      // "message" handlers etc.)
-      if (evt.originalTarget.location.href.indexOf(self.ffshare.prefs.share_url) === 0) {
-        self.attachMessageListener();
-        self.window.setTimeout(function () {
-          self.sizeToContent();
-        }, 0);
-      }
-    };
-    this.browser.addEventListener("load", this.loadListener, true);
 
-    let webProgress = this.browser.webProgress;
-    this.stateProgressListener = new StateProgressListener(this);
-    webProgress.addProgressListener(this.stateProgressListener, Ci.nsIWebProgress.NOTIFY_STATE_WINDOW);
-
-    // observer for when apps are installed.
-    let observerService = Cc["@mozilla.org/observer-service;1"]
-                            .getService(Ci.nsIObserverService);
-    observerService.addObserver(this, "openwebapp-installed", false);
-    observerService.addObserver(this, "openwebapp-uninstalled", false);
-    // Extend Services object
-    XPCOMUtils.defineLazyServiceGetter(
-      Services, "bookmarks",
-      "@mozilla.org/browser/nav-bookmarks-service;1",
-      "nsINavBookmarksService"
-    );
-  },
-
-  unload: function () {
-    let webProgress = this.browser.webProgress;
-    webProgress.removeProgressListener(this.stateProgressListener);
-    this.stateProgressListener = null;
-  },
-
-  observe: function(subject, topic, data) {
-    if (topic === 'openwebapp-installed' || topic === 'openwebapp-uninstalled') {
-      let win = this.browser.contentWindow.wrappedJSObject;
-      win.postMessage(JSON.stringify({
-        topic: topic,
-        data: JSON.parse(data)
-      }), win.location.protocol + "//" + win.location.host);
-    }
-  },
-
-  attachMessageListener: function () {
-    // listen for messages now
-    let self = this;
-    let contentWindow = this.browser.contentWindow;
-    contentWindow = contentWindow.wrappedJSObject ? contentWindow.wrappedJSObject : contentWindow;
-    contentWindow.addEventListener("message", function (evt) {
-      // Make sure we only act on messages from the page we expect.
-      if (self.ffshare.prefs.share_url.indexOf(evt.origin) === 0) {
-        // Mesages have the following properties:
-        // name: the string name of the messsage
-        // data: the JSON structure of data for the message.
-        let message = evt.data, skip = false, topic, data;
-
-        try {
-          // Only some messages are valid JSON, only care about the ones
-          // that are.
-          message = JSON.parse(message);
-        } catch (e) {
-          skip = true;
-        }
-
-        if (!skip) {
-          topic = message.topic;
-          data = message.data;
-          if (topic && self[topic]) {
-            try {
-              self[topic](data);
-            } catch (ex) {
-              console.error("Handler of topic", topic, "failed:", ex);
-            }
-          }
-        }
-      }
-    }, false);
-  },
-
-  // Fired when a pref changes from content space. the pref object has
-  // a name and value.
-  prefChanged: function (pref) {
-    let Application = Cc["@mozilla.org/fuel/application;1"].getService(Ci.fuelIApplication);
-    Application.prefs.setValue("extensions." + FFSHARE_EXT_ID + "." + pref.name, pref.value);
-  },
-
-  getOptions: function (options) {
-    options = options || {};
-    mixin(options, {
-      version: this.ffshare.version,
-      title: this.getPageTitle(),
-      description: this.getPageDescription(),
-      medium: this.getPageMedium(),
-      source: this.getSourceURL(),
-      url: this.gBrowser.currentURI.spec,
-      canonicalUrl: this.getCanonicalURL(),
-      shortUrl: this.getShortURL(),
-      previews: this.previews(),
-      siteName: this.getSiteName(),
-      prefs: {
-        system: this.ffshare.prefs.system,
-        bookmarking: this.ffshare.prefs.bookmarking,
-        use_accel_key: this.ffshare.prefs.use_accel_key
-      }
-    });
-    return options;
-  },
-
-  /**
-   * PostMessage APIs
-   * Called by content page when share is successful.
-   * @param {Object} data info about the share.
-   */
-  success: function (data) {
-    this.updateStatus([SHARE_DONE,,,data.url], true);
-    this.close();
-
-    // XXX we should work out a better bookmarking system
-    // https:// github.com/mozilla/f1/issues/66
-    if (this.ffshare.prefs.bookmarking) {
-      let tags = ['shared', 'f1', data.service];
-
-      let nsiuri = Services.io.newURI(data.url, null, null);
-      if (!Services.bookmarks.isBookmarked(nsiuri)) {
-          Services.bookmarks.insertBookmark(
-              Services.bookmarks.unfiledBookmarksFolder, nsiuri,
-              Services.bookmarks.DEFAULT_INDEX, this.getPageTitle().trim()
-          );
-      }
-      PlacesUtils.tagging.tagURI(nsiuri, tags);
-    }
-  },
-
+pageOptionsBuilder.prototype = {
   getPageTitle: function () {
     let metas = this.gBrowser.contentDocument.querySelectorAll("meta[property='og:title']"),
         i, title, content;
@@ -484,6 +319,182 @@ sharePanel.prototype = {
     return img;
   },
 
+  _validURL: function(url) {
+    // hacky validation of a url to make sure it at least appears valid
+    url = this.gBrowser.currentURI.resolve(url);
+    if (!/\w+:\/\/[^\/]+\/.+/.test(url))
+      return null;
+    return url;
+  },
+
+  previews: function () {
+    // Look for FB og:image and then rel="image_src" to use if available
+    // for og:image see: http://developers.facebook.com/docs/share
+    // for image_src see: http://about.digg.com/thumbnails
+    let metas = this.gBrowser.contentDocument.querySelectorAll("meta[property='og:image']"),
+        links = this.gBrowser.contentDocument.querySelectorAll("link[rel='image_src']"),
+        previews = [], i, content;
+
+    for (i = 0; i < metas.length; i++) {
+      content = this._validURL(metas[i].getAttribute("content"));
+      if (content) {
+        previews.push({
+          http_url : content,
+          base64 : ""
+        });
+      }
+    }
+
+    for (i = 0; i < links.length; i++) {
+      content = this._validURL(links[i].getAttribute("href"));
+      if (content) {
+        previews.push({
+          http_url : content,
+          base64 : ""
+        });
+      }
+    }
+
+    // Push in the page thumbnail last in case there aren't others
+    previews.push(
+      {
+        http_url : "",
+        base64 : this.getThumbnailData()
+      }
+    );
+    return previews;
+  }
+};
+
+
+// singleton controller for the share panel
+// A state object is attached to each browser tab when the share panel
+// is opened for that tab.  The state object is removed from the current
+// tab when the panel is closed.
+function sharePanelHelper(window, ffshare) {
+  this.window = window;
+
+  this.gBrowser = window.gBrowser;
+  this.document = window.document;
+  this.ffshare = ffshare;
+
+  this.button = this.document.getElementById('share-button');
+//  this.browser = this.document.getElementById('share-browser');
+//  this.panel = this.document.getElementById('share-popup');
+  this.services = new serviceInvocationHandler(this.window);
+
+  this.defaultWidth = 400;
+  this.lastWidth = 400;
+  this.defaultHeight = 180;
+  this.lastHeight = 180;
+  this.forceReload = true;
+
+  this.init();
+}
+sharePanelHelper.prototype = {
+  init: function () {
+    // observer for when apps are installed.
+    let observerService = Cc["@mozilla.org/observer-service;1"]
+                            .getService(Ci.nsIObserverService);
+    observerService.addObserver(this, "openwebapp-installed", false);
+    observerService.addObserver(this, "openwebapp-uninstalled", false);
+    // Extend Services object
+    XPCOMUtils.defineLazyServiceGetter(
+      Services, "bookmarks",
+      "@mozilla.org/browser/nav-bookmarks-service;1",
+      "nsINavBookmarksService"
+    );
+  },
+
+  unload: function () {
+    let webProgress = this.browser.webProgress;
+    webProgress.removeProgressListener(this.stateProgressListener);
+    this.stateProgressListener = null;
+  },
+
+  observe: function(subject, topic, data) {
+    if (topic === 'openwebapp-installed' || topic === 'openwebapp-uninstalled') {
+      let win = this.browser.contentWindow.wrappedJSObject;
+      win.postMessage(JSON.stringify({
+        topic: topic,
+        data: JSON.parse(data)
+      }), win.location.protocol + "//" + win.location.host);
+    }
+  },
+
+  onMediatorCallback: function(message) {
+    // listen for messages now
+    let contentWindow = this.browser.contentWindow;
+    contentWindow = contentWindow.wrappedJSObject ? contentWindow.wrappedJSObject : contentWindow;
+    cmd = message.cmd;
+    if (cmd && this[cmd]) {
+      try {
+        return this[cmd](message);
+      } catch (ex) {
+        console.error("Handler of topic", topic, "failed:", ex);
+      }
+    } else {
+      console.log("ignoring mediator callback", cmd);
+    }
+    // not handled so just return the same message
+    return message;
+  },
+
+  // Fired when a pref changes from content space. the pref object has
+  // a name and value.
+  prefChanged: function (pref) {
+    let Application = Cc["@mozilla.org/fuel/application;1"].getService(Ci.fuelIApplication);
+    Application.prefs.setValue("extensions." + FFSHARE_EXT_ID + "." + pref.name, pref.value);
+  },
+
+  getOptions: function (options) {
+    var pageOpts = new pageOptionsBuilder(this.gBrowser);
+    options = options || {};
+    mixin(options, {
+      version: this.ffshare.version,
+      title: pageOpts.getPageTitle(),
+      description: pageOpts.getPageDescription(),
+      medium: pageOpts.getPageMedium(),
+      source: pageOpts.getSourceURL(),
+      url: this.gBrowser.currentURI.spec,
+      canonicalUrl: pageOpts.getCanonicalURL(),
+      shortUrl: pageOpts.getShortURL(),
+      previews: pageOpts.previews(),
+      siteName: pageOpts.getSiteName(),
+      prefs: {
+        system: this.ffshare.prefs.system,
+        bookmarking: this.ffshare.prefs.bookmarking,
+        use_accel_key: this.ffshare.prefs.use_accel_key
+      }
+    });
+    return options;
+  },
+
+  /**
+   * PostMessage APIs
+   * Called by content page when share is successful.
+   * @param {Object} data info about the share.
+   */
+  success: function (data) {
+    this.updateStatus([SHARE_DONE,,,data.url], true);
+    this.close();
+
+    // XXX we should work out a better bookmarking system
+    // https:// github.com/mozilla/f1/issues/66
+    if (this.ffshare.prefs.bookmarking) {
+      let tags = ['shared', 'f1', data.service];
+
+      let nsiuri = Services.io.newURI(data.url, null, null);
+      if (!Services.bookmarks.isBookmarked(nsiuri)) {
+          Services.bookmarks.insertBookmark(
+              Services.bookmarks.unfiledBookmarksFolder, nsiuri,
+              Services.bookmarks.DEFAULT_INDEX, this.getPageTitle().trim()
+          );
+      }
+      PlacesUtils.tagging.tagURI(nsiuri, tags);
+    }
+  },
+
   /**
    * Method used to generate thumbnail data from a postMessage
    * originating from the share UI in content-space
@@ -531,66 +542,12 @@ sharePanel.prototype = {
     img.src = imgUrl;
   },
 
-  _validURL: function(url) {
-    // hacky validation of a url to make sure it at least appears valid
-    url = this.gBrowser.currentURI.resolve(url);
-    if (!/\w+:\/\/[^\/]+\/.+/.test(url))
-      return null;
-    return url;
-  },
-
-  previews: function () {
-    // Look for FB og:image and then rel="image_src" to use if available
-    // for og:image see: http://developers.facebook.com/docs/share
-    // for image_src see: http://about.digg.com/thumbnails
-    let metas = this.gBrowser.contentDocument.querySelectorAll("meta[property='og:image']"),
-        links = this.gBrowser.contentDocument.querySelectorAll("link[rel='image_src']"),
-        previews = [], i, content;
-
-    for (i = 0; i < metas.length; i++) {
-      content = this._validURL(metas[i].getAttribute("content"));
-      if (content) {
-        previews.push({
-          http_url : content,
-          base64 : ""
-        });
-      }
-    }
-
-    for (i = 0; i < links.length; i++) {
-      content = this._validURL(links[i].getAttribute("href"));
-      if (content) {
-        previews.push({
-          http_url : content,
-          base64 : ""
-        });
-      }
-    }
-
-    // Push in the page thumbnail last in case there aren't others
-    previews.push(
-      {
-        http_url : "",
-        base64 : this.getThumbnailData()
-      }
-    );
-    return previews;
-  },
-
   getShareState: function() {
     let win = this.browser.contentWindow.wrappedJSObject;
     win.postMessage(JSON.stringify({
         topic: 'shareState',
         data: this.gBrowser.selectedTab.shareState
       }), win.location.protocol + "//" + win.location.host);
-  },
-
-  escapeHtml: function (text) {
-    return text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;');
   },
 
   sizeToContent: function () {
@@ -634,7 +591,7 @@ sharePanel.prototype = {
     if (this.button) this.button.removeAttribute("checked");
   },
 
-  getBrowserTabForUrl: function(url) {
+  _getBrowserTabForUrl: function(url) {
     if (!url)
       return this.gBrowser.selectedTab;
     if (this.gBrowser.getBrowserForTab(this.gBrowser.selectedTab).currentURI.spec == url)
@@ -656,7 +613,7 @@ sharePanel.prototype = {
    * @param {Boolean} only passed by the final success call
    */
   updateStatus: function (statusData, success) {
-    let contentTab = this.getBrowserTabForUrl(statusData && statusData.length > 3 ? statusData[3] : null),
+    let contentTab = this._getBrowserTabForUrl(statusData && statusData.length > 3 ? statusData[3] : null),
         nBox = this.gBrowser.getNotificationBox(this.gBrowser.getBrowserForTab(contentTab)),
         notification = nBox.getNotificationWithValue("mozilla-f1-share-error"),
         button = this.button,
@@ -776,22 +733,8 @@ sharePanel.prototype = {
     this.panel.openPopup(anchor, position, 0, 0, false, false);
   },
 
-  panelReady: function() {
-    // ask for creation of service iframes now that we know the panel
-    // has its listener in place for the messages this generates...
-    let thePanelRecord = {
-      methodName: 'link.send',
-      args: {},
-      contentWindow: this.window, // correct?
-      panel: this.panel,
-      iframe: this.browser,
-      successCB: function() {dump("panel iframes created OK\n");},
-      errorCB: function(err) {dump("Error creating iframes " + err + "\n");}
-    };
-    this.services._updateContent(thePanelRecord);
-  },
-
-  installApp: function(manifestUrl) {
+  installApp: function(message) {
+    let manifestUrl = message.app;
     let self = this;
     let {FFRepoImplService} = require("api");
     var args = {
@@ -800,19 +743,21 @@ sharePanel.prototype = {
       onerror: function(errob) {
         // TODO: should probably consider notifying the content of the error
         // so it can do something useful.
-        dump("Failed to install " + manifestUrl + ": " + errob.code + ": " + errob.message + "\n");
+        console.log("Failed to install " + manifestUrl + ": " + errob.code + ": " + errob.message);
       },
       onsuccess: function() {
         // Note the app being installed will have triggered the
         // 'openwebapp-installed' observer, which will in-turn have posted
         // a message to the content.
+        console.log("successful install of", manifestUrl);
       }
     };
     // Hrmph - need to use an installOrigin of the hard-coded OWA app store
+    console.log("requesting install of", manifestUrl);
     FFRepoImplService.install('http://localhost:8420',
                               args,
-                              this.browser);
+                              undefined); // the window is only used if a prompt is shown.
   }
 };
 
-exports.sharePanel = sharePanel;
+exports.sharePanelHelper = sharePanelHelper;

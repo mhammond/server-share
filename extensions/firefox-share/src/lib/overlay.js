@@ -63,9 +63,13 @@ function installOverlay(win) {
   } else {
     pi = loadStylesheet(win, "skin/overlay.css");
   }
+  // XXX - can't unload this as by the time the unload function is called
+  // win.document is undefined.  Does this really matter?
+  /**
   unloaders.push(function () {
     win.document.removeChild(pi);
   });
+  **/
 
   // ********************************************************************
   // create our commandset
@@ -196,7 +200,7 @@ function installOverlay(win) {
   let button = document.createElementNS(NS_XUL, "image");
   button.id = SHARE_BUTTON_ID;
   button.className = "urlbar-icon";
-  button.setAttribute("onclick", "ffshare.togglePanel();");
+  button.setAttribute("onclick", "ffshare.invoke();");
   let urlbarIcons = document.getElementById("urlbar-icons");
   urlbarIcons.insertBefore(button, urlbarIcons.firstChild);
   unloaders.push(function() {
