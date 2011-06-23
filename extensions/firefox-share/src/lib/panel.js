@@ -431,7 +431,7 @@ sharePanelHelper.prototype = {
       try {
         return this[cmd](message);
       } catch (ex) {
-        console.error("Handler of topic", topic, "failed:", ex);
+        console.error("Handler of OWA command", cmd, "failed:", ex);
       }
     } else {
       console.log("ignoring mediator callback", cmd);
