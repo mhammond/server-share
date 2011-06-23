@@ -194,19 +194,17 @@ FFShare.prototype = {
     keycode : "VK_F1",
     oldKeycodeId: "key_old_ffshare",
 
-    _invoke: function(options) {
-        // tell OWA that we want to handle the link.send service
-        // (this need be done only once, but multiple times doesn't hurt)
-        let {serviceInvocationHandler} = require("services");
-        let services = new serviceInvocationHandler(this.window);
-        services.registerMethodHandler("link.send", this.prefs.share_url);
+    _createMediator: function() {
         // create our 'helper' object - we will pass it the iframe once we
         // get the onshow callback.
         let {sharePanelHelper} = require("panel");
         let panelHelper = new sharePanelHelper(this.window, this);
-        // setup the mediator args and invoke the service.
-        let mediatorargs = {
+        return {
+            url: this.prefs.share_url,
             anchor: this.window.document.getElementById('share-button'),
+            updateargs: function(contentargs) {
+                return panelHelper.getOptions(contentargs);
+            },
             onshow: function(iframe) {
                 panelHelper.browser = iframe;
             },
@@ -215,21 +213,17 @@ FFShare.prototype = {
                 return panelHelper.onMediatorCallback(req);
             }
         };
-        services.invoke(this.window, "link.send", panelHelper.getOptions(options),
+    },
+
+    invoke: function(options) {
+        // invoke the service.
+        this.services.invoke(this.window, "link.send", options,
                         function() {
                             console.log("send was success");
                         },
                         function(err) {
                             console.error("Failed to invoke share service", err);
-                        },
-                        mediatorargs);
-    },
-    invoke: function(options) {
-        try {
-            this._invoke(options);
-        } catch (ex) {
-            console.error("invoke callback failed", ex, ex.stack);
-        }
+                        });
     },
 
     togglePanel: function(options) {
@@ -388,6 +382,14 @@ FFShare.prototype = {
         this.tabViewHideListener = function() { self.onTabViewHide() };
         this.window.addEventListener('tabviewshow', this.tabViewShowListener, false);
         this.window.addEventListener('tabviewhide', this.tabViewHideListener, false);
+
+        // tell OWA that we want to handle the link.send service
+        // (this need be done only once, but multiple times doesn't hurt - yet!)
+        let {serviceInvocationHandler} = require("services");
+        this.services = new serviceInvocationHandler(this.window);
+        this.services.registerMediator("link.send", function() {
+            return self._createMediator();
+        });
     },
 
     unload: function() {
