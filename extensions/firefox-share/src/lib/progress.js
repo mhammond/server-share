@@ -113,11 +113,6 @@ LocationChangeProgressListener.prototype = {
 
   onLocationChange: function (aWebProgress, aRequest, aLocation) {
     this.f1.canShareURI(aLocation);
-    //dump("onlocationchange causing switchtab\n");
-    let f1 = this.f1;
-    f1.window.setTimeout(function () {
-      f1.switchTab(true);
-    }, 0);
   },
 
   onStateChange: function (aWebProgress, aRequest, aStateFlags, aStatus) {},
