@@ -51,6 +51,7 @@ let {LocationChangeProgressListener} = require("progress");
 
 let {installOverlay} = require("overlay");
 let {getString} = require("addonutils");
+let jetpackOptions;
 
 const NS_XUL = "http://www.mozilla.org/keymaster/gatekeeper/there.is.only.xul";
 const SHARE_BUTTON_ID = "share-button";
@@ -173,6 +174,34 @@ function openAndReuseOneTabPerURL(url) {
   }
 }
 
+function createMediator() {
+    // create our 'helper' object - we will pass it the iframe once we
+    // get the onshow callback.
+    let win = Services.wm.getMostRecentWindow("navigator:browser");
+    let ffshare = new FFShare(win);
+    console.log("creating mediator with window", win, "and doc", win.document);
+    let {sharePanelHelper} = require("panel");
+    let panelHelper = new sharePanelHelper(win, ffshare);
+    return {
+        url: ffshare.prefs.share_url,
+        anchor: win.document.getElementById('share-button'),
+        updateargs: function(contentargs) {
+            return panelHelper.getOptions(contentargs);
+        },
+        onshow: function(iframe) {
+            panelHelper.browser = iframe;
+            panelHelper.panelShown();
+        },
+        onhide: function(iframe) {
+            console.log("got onhide callback");
+            panelHelper.panelHidden();
+            panelHelper.browser = null;
+        },
+        onresult: function(req) {
+            return panelHelper.onMediatorCallback(req);
+        }
+    };
+}
 
 function FFShare(win) {
     this.window = win;
@@ -189,31 +218,11 @@ function FFShare(win) {
     }
     checkWindow();
 }
+
 FFShare.prototype = {
     keycodeId: "key_ffshare",
     keycode : "VK_F1",
     oldKeycodeId: "key_old_ffshare",
-
-    _createMediator: function() {
-        // create our 'helper' object - we will pass it the iframe once we
-        // get the onshow callback.
-        let {sharePanelHelper} = require("panel");
-        let panelHelper = new sharePanelHelper(this.window, this);
-        return {
-            url: this.prefs.share_url,
-            anchor: this.window.document.getElementById('share-button'),
-            updateargs: function(contentargs) {
-                return panelHelper.getOptions(contentargs);
-            },
-            onshow: function(iframe) {
-                panelHelper.browser = iframe;
-            },
-            onhide: function(iframe) {console.log("got onhide callback");},
-            onresult: function(req) {
-                return panelHelper.onMediatorCallback(req);
-            }
-        };
-    },
 
     invoke: function(options) {
         // invoke the service.
@@ -224,42 +233,6 @@ FFShare.prototype = {
                         function(err) {
                             console.error("Failed to invoke share service", err);
                         });
-    },
-
-    togglePanel: function(options) {
-        let popup = this.window.document.getElementById('share-popup');
-        if (popup.state == 'open') {
-            this.sharePanel.close();
-        } else {
-            this.sharePanel.show(options);
-        }
-    },
-
-    switchTab: function (waitForLoad) {
-      let self = this;
-      if (waitForLoad) {
-        // this double-loads the share panel since image data may not be
-        // available yet
-        this.window.gBrowser.contentWindow.addEventListener('DOMContentLoaded', function () {
-          self.switchTab(false);
-        }, true);
-      }
-
-      var selectedTab = this.window.gBrowser.selectedTab;
-      var visible = this.window.document.getElementById('share-popup').state === 'open';
-      var isopen = selectedTab.shareState && selectedTab.shareState.open;
-      if (visible && !isopen) {
-        this.sharePanel.close();
-      }
-      if (isopen) {
-        this.window.setTimeout(function () {
-          self.sharePanel.show({});
-        }, 0);
-      } else {
-        this.window.setTimeout(function () {
-          self.sharePanel.updateStatus();
-        }, 0);
-      }
     },
 
     canShareURI: function (aURI) {
@@ -355,12 +328,8 @@ FFShare.prototype = {
           this.prefs.frontpage_url = 'http://f1-staging.mozillamessaging.com/';
         }
 
-        let self = this;
-/***        
-        AddonManager.getAddonByID(FFSHARE_EXT_ID, function (addon) {
-            self.onInstallUpgrade(addon.version);
-        });
-***/
+        let addon_version = jetpackOptions.metadata.ffshare.version;
+        this.onInstallUpgrade(addon_version);
         try {
             this.canShareProgressListener = new LocationChangeProgressListener(this);
             this.window.gBrowser.addProgressListener(this.canShareProgressListener);
@@ -388,7 +357,7 @@ FFShare.prototype = {
         let {serviceInvocationHandler} = require("services");
         this.services = new serviceInvocationHandler(this.window);
         this.services.registerMediator("link.send", function() {
-            return self._createMediator();
+            return createMediator();
         });
     },
 
@@ -416,7 +385,6 @@ FFShare.prototype = {
         return;
       }
       let Application = Cc["@mozilla.org/fuel/application;1"].getService(Ci.fuelIApplication);
-      let showUpgradeTab = !!this.prefs.previous_version;
 
       this.prefs.previous_version = version;
       Application.prefs.setValue("extensions." + FFSHARE_EXT_ID + ".previous_version", version);
@@ -427,12 +395,6 @@ FFShare.prototype = {
         this.prefs.firstRun = false;
         Application.prefs.setValue("extensions." + FFSHARE_EXT_ID + ".first-install", false);
         openAndReuseOneTabPerURL(this.prefs.frontpage_url);
-      } else if (showUpgradeTab) {
-        // For old users of F1, let them know of the UI change to URL bar.
-        // THIS CAN BE REMOVED some time after the 0.8.1 add-on release.
-        // Only show it if the user previously installed F1, indicated by having
-        // a previous_version value.
-        openAndReuseOneTabPerURL("http://mozillalabs.com/messaging/2011/03/22/mozilla-f1-finding-a-new-home/");
       }
     },
 
@@ -614,8 +576,9 @@ function getAddonShortName(name) {
   return name.split('@')[0];
 }
 
-function startup() {
+exports.main = function(options, callbacks) {
     // just the 'require' of this module boostraps the world.
+    jetpackOptions = options;
     let owa = require("openwebapps/main");
 
     /* Setup l10n, getString is loaded from addonutils */
@@ -625,6 +588,8 @@ function startup() {
 
     Services.ww.registerNotification(windowWatcher);
     unloaders.push(function() Services.ww.unregisterNotification(windowWatcher));
+    // Hook up unloaders
+    unload.when(shutdown);
 };
 
 function shutdown(reason) {
@@ -633,7 +598,3 @@ function shutdown(reason) {
     unloaders.forEach(function(unload) unload && unload());
 }
 
-startup();
-
-// Hook up unloaders
-unload.when(shutdown);

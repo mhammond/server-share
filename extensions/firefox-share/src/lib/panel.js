@@ -375,12 +375,11 @@ function sharePanelHelper(window, ffshare) {
   this.window = window;
 
   this.gBrowser = window.gBrowser;
-  this.document = window.document;
   this.ffshare = ffshare;
+  this.browser = null; // will be set later once panel is created.
 
-  this.button = this.document.getElementById('share-button');
-//  this.browser = this.document.getElementById('share-browser');
-//  this.panel = this.document.getElementById('share-popup');
+  let doc = window.document;
+  this.button = doc.getElementById('share-button');
   this.services = new serviceInvocationHandler(this.window);
 
   this.defaultWidth = 400;
@@ -393,11 +392,6 @@ function sharePanelHelper(window, ffshare) {
 }
 sharePanelHelper.prototype = {
   init: function () {
-    // observer for when apps are installed.
-    let observerService = Cc["@mozilla.org/observer-service;1"]
-                            .getService(Ci.nsIObserverService);
-    observerService.addObserver(this, "openwebapp-installed", false);
-    observerService.addObserver(this, "openwebapp-uninstalled", false);
     // Extend Services object
     XPCOMUtils.defineLazyServiceGetter(
       Services, "bookmarks",
@@ -412,20 +406,16 @@ sharePanelHelper.prototype = {
     this.stateProgressListener = null;
   },
 
-  observe: function(subject, topic, data) {
-    if (topic === 'openwebapp-installed' || topic === 'openwebapp-uninstalled') {
-      let win = this.browser.contentWindow.wrappedJSObject;
-      win.postMessage(JSON.stringify({
-        topic: topic,
-        data: JSON.parse(data)
-      }), win.location.protocol + "//" + win.location.host);
-    }
+  panelShown: function () {
+    this.button.setAttribute("checked", true);
+  },
+
+  panelHidden: function () {
+    this.button.removeAttribute("checked");
   },
 
   onMediatorCallback: function(message) {
     // listen for messages now
-    let contentWindow = this.browser.contentWindow;
-    contentWindow = contentWindow.wrappedJSObject ? contentWindow.wrappedJSObject : contentWindow;
     cmd = message.cmd;
     if (cmd && this[cmd]) {
       try {
@@ -551,6 +541,9 @@ sharePanelHelper.prototype = {
   },
 
   sizeToContent: function () {
+    if (!this.browser) {
+      return;
+    }
     let doc = this.browser.contentDocument.wrappedJSObject;
     let wrapper = doc && doc.getElementById('wrapper');
     if (!wrapper) {
